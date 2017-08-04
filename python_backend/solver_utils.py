@@ -9,7 +9,7 @@ import cPickle as pickle
 import numpy as np
 
 
-def get_edge_features(rag, input_path, input_key, max_threads):
+def get_edge_features(rag, input_path, input_key, max_threads=-1):
 
     # hard coded features
     filter_list = [ff.gaussianSmoothing, ff.laplacianOfGaussian, ff.hessianOfGaussianEigenvalues]
@@ -27,13 +27,17 @@ def get_edge_features(rag, input_path, input_key, max_threads):
             # for multichannel feature we need to accumulate over the channels
             if response.ndim == 3:
                 features.append(
-                    nrag.gridRagAccumulateEdgeFeatures(rag, response, response.min(), response.max(), max_threads)
+                    nrag.accumulateEdgeStandartFeatures(
+                        rag, response, response.min(), response.max(), numberOfThreads=max_threads
+                    )
                 )
             else:
                 for c in range(response.shape[-1]):
                     response_c = response[..., c]
                     features.append(
-                        nrag.gridRagAccumulateEdgeFeatures(rag, response_c, response_c.min(), response_c.max(), max_threads)
+                        nrag.accumulateEdgeStandartFeatures(
+                            rag, response_c, response_c.min(), response_c.max(), numberOfThreads=max_threads
+                        )
                     )
 
     features = np.concatenate(features, axis=1)
@@ -41,7 +45,7 @@ def get_edge_features(rag, input_path, input_key, max_threads):
 
 
 # TODO boundary bias ?!
-def get_edge_costs(rag, probabilities, weight_by_size=True):
+def get_edge_costs(rag, probabilities, weight_by_size=True, max_threads=-1):
 
     # clip the probabilities to avoid diverging costs
     # and transform to costs
@@ -50,7 +54,8 @@ def get_edge_costs(rag, probabilities, weight_by_size=True):
 
     # weight by edge size
     if weight_by_size:
-        _, edge_size = nrag.accumulateEdgeMeaAndLenght(rag)
+        fake_data = np.zeros(rag.shape, dtype='uint32')
+        _, edge_size = nrag.accumulateEdgeMeaAndLenght(rag, fake_data, numberOfThreads=max_threads)
         weight = edge_size / edge_size.max()
         costs = weight * costs
 
