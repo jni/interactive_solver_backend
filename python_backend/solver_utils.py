@@ -4,9 +4,10 @@ import nifty
 import nifty.graph.rag as nrag
 import nifty.graph.optimization.multicut as nmc
 import fastfilters as ff
-import vigra
 import cPickle as pickle
 import numpy as np
+
+from utils import read_hdf5
 
 
 def get_edge_features(rag, input_path, input_key, max_threads=-1):
@@ -16,7 +17,7 @@ def get_edge_features(rag, input_path, input_key, max_threads=-1):
     sigmas = [1.6, 4.2, 8.2]
 
     # load the data
-    data = vigra.readHDF5(input_path, input_key)
+    data = read_hdf5(input_path, input_key)
 
     features = []
     # iterate over the filter, compute them and then accumulate feature responses over the edges
@@ -83,7 +84,7 @@ def preprocess(
     assert isinstance(fragments_path, str)
     assert isinstance(fragments_key, str)
 
-    fragments = vigra.readHDF5(fragments_path, fragments_key)
+    fragments = read_hdf5(fragments_path, fragments_key)
     rag = nrag.gridRag(fragments, numberOfThreads=max_threads)
 
     features = []
@@ -103,8 +104,8 @@ def solve_multicut(uv_ids, costs):
     pass
 
 
-def edge_groundtuth(rag, gt_path, gt_key):
-    gt = vigra.readHDF5(gt_path, gt_key)
+def get_edge_groundtuth(rag, gt_path, gt_key):
+    gt = read_hdf5(gt_path, gt_key)
     node_gt = nrag.accumulateLabels(rag, gt)
     uv_ids = rag.uvIds()
     edge_gt = node_gt[uv_ids[:, 0]] != node_gt[uv_ids[:, 1]]
@@ -112,26 +113,14 @@ def edge_groundtuth(rag, gt_path, gt_key):
 
 
 def learn_rf(
-    input_paths,
-    input_keys,
-    fragments_path,
-    fragments_key,
-    gt_path,
-    gt_key,
+    features,
+    labels,
     rf_save_path,
     n_trees=250,
     max_threads=-1
 ):
+    assert len(features) == len(labels)
     from sklearn.ensemble import RandomForestClassifier
-
-    fragments = vigra.readHDF5(fragments_path, fragments_key)
-    rag = nrag.gridRag(fragments, numberOfThreads=max_threads)
-
-    features = []
-    for ii, path in enumerate(input_path):
-        features.append(get_edge_features(rag, path, input_keys[ii]))
-    features = np.concatenate(features, axis=1)
-    labels = edge_groundtuth(rag, gt_path, gt_key)
 
     rf = RandomForestClassifier(n_estimators=n_trees, n_jobs=max_threads)
     rf.fit(features, labels)
