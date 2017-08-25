@@ -1,13 +1,22 @@
 from __future__ import division, print_function
 
-import nifty.graph.rag as nrag
-import nifty.graph.optimization.multicut as nmc
+try:
+    import nifty.graph.rag as nrag
+    import nifty.graph.optimization.multicut as nmc
+except ImportError:
+    import nifty_with_cplex.graph.rag as nrag
+    import nifty_with_cplex.graph.optimization.multicut as nmc
 
 import numpy as np
 from functools import partial
 
 from .utils import read_hdf5
 from .probability_callbacks import random_forest_callback, edge_statistics_callback
+
+
+def node_result_to_edge_result(graph, node_result):
+    uv_ids = graph.uvIds()
+    return node_result[uv_ids[:, 0]] != node_result[uv_ids[:, 1]]
 
 
 # TODO boundary bias ?!
@@ -126,7 +135,7 @@ def preprocess_with_simple_statistics(
 def solve_multicut(graph, costs):
     assert graph.numberOfEdges == len(costs)
     objective = nmc.multicutObjective(graph, costs)
-    solver = objective.multicutAndresKernighanLinFactory(
-        greedyWarmstart=True
+    solver = objective.kernighanLinFactory(
+        warmStartGreedy=True
     ).create(objective)
     return solver.optimize()

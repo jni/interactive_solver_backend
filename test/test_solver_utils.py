@@ -1,14 +1,18 @@
 import unittest
-import nifty
-import nifty.graph.rag as nrag
-import vigra
 import numpy as np
 import os
+
+try:
+    import nifty
+    import nifty.graph.rag as nrag
+except ImportError:
+    import nifty_with_cplex as nifty
+    import nifty_with_cplex.graph.rag as nrag
 
 # hacky import
 import sys
 sys.path.append('..')
-from solver_backend import compute_edge_features, learn_rf, solve_multicut
+from solver_backend import compute_edge_features, learn_rf, solve_multicut, read_hdf5
 from solver_backend import preprocess_with_random_forest, preprocess_with_simple_statistics
 
 
@@ -54,8 +58,9 @@ class TestSolverUtils(unittest.TestCase):
         }
 
     def test_features(self):
+        print("Running test features...")
         inputs = self.get_data_path()
-        seg = vigra.readHDF5(inputs['seg'], 'data')
+        seg = read_hdf5(inputs['seg'], 'data')
         rag = nrag.gridRag(seg)
         features = compute_edge_features(rag, inputs['raw'], 'data', 8)
 
@@ -63,6 +68,7 @@ class TestSolverUtils(unittest.TestCase):
         self.assertFalse(np.isnan(features).any())
         for col in range(features.shape[1]):
             self.assertFalse((features[:, col] == 0).all())
+        print("... done")
 
     def check_preprocess_output(self, rag, costs):
         self.assertEqual(costs.ndim, 1)
@@ -71,6 +77,7 @@ class TestSolverUtils(unittest.TestCase):
         self.assertFalse((costs == 0).all())
 
     def test_preprocess_random_forest(self):
+        print("Running test preprocess random forest...")
         inputs = self.get_data_path()
         rag, costs = preprocess_with_random_forest(
             inputs['raw'], 'data',
@@ -78,18 +85,23 @@ class TestSolverUtils(unittest.TestCase):
             inputs['rf'], 8
         )
         self.check_preprocess_output(rag, costs)
+        print("... done")
 
     def test_preprocess_statistics(self):
+        print("Running test preprocess statistics...")
         inputs = self.get_data_path()
         for stat in ('max', 'mean', 'median', 'q75', 'q90'):
+            print("with stat:", stat)
             rag, costs = preprocess_with_simple_statistics(
                 inputs['pmap'], 'data',
                 inputs['seg'], 'data',
                 8, stat
             )
             self.check_preprocess_output(rag, costs)
+        print("... done")
 
     def test_mc_solver(self):
+        print("Running test multicut...")
         inputs = self.get_data_path()
         rag, costs = preprocess_with_random_forest(
             inputs['raw'], 'data',
@@ -101,6 +113,7 @@ class TestSolverUtils(unittest.TestCase):
         mc_nodes = solve_multicut(graph, costs)
         self.assertEqual(len(mc_nodes), rag.numberOfNodes)
         self.assertGreater(len(np.unique(mc_nodes)), 10)
+        print("... done")
 
 if __name__ == '__main__':
     unittest.main()

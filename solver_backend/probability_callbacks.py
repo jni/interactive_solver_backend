@@ -1,8 +1,12 @@
 from __future__ import division, print_function
 
-import nifty.graph.rag as nrag
 from concurrent import futures
 import numpy as np
+
+try:
+    import nifty.graph.rag as nrag
+except:
+    import nifty_with_cplex.graph.rag as nrag
 
 # we try to import fastfilters, but have vigra as a fallback
 try:
