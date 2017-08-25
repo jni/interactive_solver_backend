@@ -50,6 +50,9 @@ learn_rf(
 )
 ```
 
+To learn the Random Forest from multiple inputs, replace the paths / keys by
+lists of paths / lists of keys.
+
 ### Interactive
 
 TODO
