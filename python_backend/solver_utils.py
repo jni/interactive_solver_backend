@@ -1,11 +1,12 @@
 from __future__ import division, print_function
 
-import nifty
 import nifty.graph.rag as nrag
 import nifty.graph.optimization.multicut as nmc
+
 import fastfilters as ff
-import cPickle as pickle
+import pickle
 import numpy as np
+from functools import partial
 
 from utils import read_hdf5
 
@@ -63,7 +64,50 @@ def get_edge_costs(rag, probabilities, weight_by_size=True, max_threads=-1):
     return costs
 
 
-def preprocess(
+def preprocess_with_callback(
+    fragments_path,
+    fragments_key,
+    probability_callback,
+    max_threads
+):
+    """
+    Preprocess the data for the interactive solver with
+    callback for edge-probability calculation.
+    @Parameter
+    ----------
+    @Returns
+    --------
+    """
+    assert isinstance(fragments_path, str)
+    assert isinstance(fragments_key, str)
+
+    fragments = read_hdf5(fragments_path, fragments_key)
+    rag = nrag.gridRag(fragments, numberOfThreads=max_threads)
+
+    probabilities = probability_callback(rag)
+    costs = get_edge_costs(rag, probabilities)
+    return rag, costs
+
+
+def random_forest_callback(
+    rag,
+    input_paths,
+    input_keys,
+    rf_path,
+    max_threads
+):
+    features = []
+    for ii, path in enumerate(input_paths):
+        features.append(get_edge_features(rag, path, input_keys[ii]))
+    features = np.concatenate(features, axis=1)
+
+    with open(rf_path, 'rb') as f:
+        rf = pickle.load(f)
+
+    return rf.predict_proba(features)[:, 1]
+
+
+def preprocess_with_random_forest(
     input_paths,
     input_keys,
     fragments_path,
@@ -72,36 +116,78 @@ def preprocess(
     max_threads
 ):
     """
-    Preprocess the data for the interactive solver.
+    Preprocess the data for the interactive solver with random forest probabilities.
     @Parameter
     ----------
     @Returns
     --------
     """
 
-    assert isinstance(input_paths, list)
-    assert isinstance(input_keys, list)
-    assert isinstance(fragments_path, str)
-    assert isinstance(fragments_key, str)
+    assert isinstance(input_paths, (list, tuple, str))
+    assert isinstance(input_keys, (list, tuple, str))
 
-    fragments = read_hdf5(fragments_path, fragments_key)
-    rag = nrag.gridRag(fragments, numberOfThreads=max_threads)
+    if isinstance(input_paths, str):
+        input_paths = [input_paths]
+    if isinstance(input_keys, str):
+        input_paths = [input_keys]
 
-    features = []
-    for ii, path in enumerate(input_path):
-        features.append(get_edge_features(rag, path, input_keys[ii]))
-    features = np.concatenate(features, axis=1)
-
-    with open(rf_path) as f:
-        rf = cPickle.load(f)
-
-    probabilities = rf.predict_proba(features)[:, 1]
-    costs = get_edge_costs(rag, probabilities)
-    return rag, costs
+    callback = partial(
+        random_forest_callback,
+        input_paths=input_paths,
+        input_keys=input_keys,
+        rf_path=rf_path,
+        max_threads=max_threads
+    )
+    return preprocess_with_callback(fragments_path, fragments_key, callback, max_threads)
 
 
-def solve_multicut(uv_ids, costs):
-    pass
+def edge_statistics_callback(rag, input_path, input_key, statistic, max_threads):
+    stats_to_index = {'mean': 0, 'max': 8, 'median': 5, 'q75': 6, 'q90': 7}
+    assert statistic in stats_to_index
+    index = stats_to_index[statistic]
+    data = read_hdf5(input_path, input_key)
+    return nrag.accumulateEdgeStandartFeatures(
+        rag, data, data.min(), data.max(), numberOfThreads=max_threads
+    )[:, index]
+
+
+def preprocess_with_simple_statistics(
+    input_path,
+    input_key,
+    fragments_path,
+    fragments_key,
+    max_threads,
+    statistic='mean'
+):
+    """
+    Preprocess the data for the interactive solver with edge probabilites from simple accumulation.
+    @Parameter
+    ----------
+    @Returns
+    --------
+    """
+    assert isinstance(input_path, str)
+    assert isinstance(input_key, str)
+
+    callback = partial(
+        edge_statistics_callback,
+        input_path=input_path,
+        input_key=input_key,
+        statistic=statistic,
+        max_threads=max_threads
+    )
+    return preprocess_with_callback(fragments_path, fragments_key, callback, max_threads)
+
+
+# TODO time limit -> needs different kl impl and visitor
+# we use kernighan lin for now
+def solve_multicut(graph, costs):
+    assert graph.numberOfEdges == len(costs)
+    objective = nmc.multicutObjective(graph, costs)
+    solver = objective.multicutAndresKernighanLinFactory(
+        greedyWarmstart=True
+    ).create(objective)
+    return solver.optimize()
 
 
 def get_edge_groundtuth(rag, gt_path, gt_key):
@@ -124,5 +210,5 @@ def learn_rf(
 
     rf = RandomForestClassifier(n_estimators=n_trees, n_jobs=max_threads)
     rf.fit(features, labels)
-    with open(rf_save_path) as f:
+    with open(rf_save_path, 'wb') as f:
         pickle.dump(rf, f)

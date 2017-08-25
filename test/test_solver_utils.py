@@ -2,23 +2,38 @@ import unittest
 import nifty.graph.rag as nrag
 import vigra
 import numpy as np
+import os
 
 # hacky import
 import sys
 sys.path.append('..')
-from python_backend import *
+from python_backend import get_edge_features
 
 
 class TestSolverUtils(unittest.TestCase):
 
+    # download test data
+    def setUp(self):
+        import zipfile
+        from subprocess import call
+        url = 'https://www.dropbox.com/s/l1tgzlim8h1pb7w/test_data_anisotropic.zip?dl=0'
+        data_file = 'data.zip'
+        # FIXME good old wget still does the job done better than any python lib I know....
+        call(['wget', '-O', data_file, url])
+        with zipfile.ZipFile(data_file) as f:
+            f.extractall('.')
+        os.remove(data_file)
+
+    # remove test data
+    def tearDown(self):
+        from shutil import rmtree
+        rmtree('./data')
+
     def get_data_path(self):
-        raw_path = '/home/papec/Work/neurodata_hdd/ntwrk_papec/cremi/sampleA/raw/sampleA_raw_none.h5'
-        seg_path = '/home/papec/Work/neurodata_hdd/ntwrk_papec/cremi/sampleA/ws/sampleA_wsdt_googleV1_none.h5'
-        gt_path = '/home/papec/Work/neurodata_hdd/ntwrk_papec/cremi/sampleA/gt/sampleA_neurongt_none.h5'
         return {
-            'raw': raw_path,
-            'seg': seg_path,
-            'gt':  gt_path
+            'seg': './data/seg.h5',
+            'raw': './data/raw.h5',
+            'rf': ''  # TODO
         }
 
     def test_features(self):
@@ -32,10 +47,10 @@ class TestSolverUtils(unittest.TestCase):
         for col in range(features.shape[1]):
             self.assertFalse((features[:, col] == 0).all())
 
-    def test_costs(self):
+    def test_preprocess_random_forest(self):
         pass
 
-    def test_preprocess(self):
+    def test_preprocess_statistics(self):
         pass
 
     def test_mc_solver(self):
