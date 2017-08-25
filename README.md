@@ -59,6 +59,7 @@ TODO
 
 ## Requirements
 
+- zmq
 - sklearn (`conda install -c conda-forge scikit-learn`)
 - nifty (`conda install -c cpape nifty`)
 - h5py (`conda install -c conda-forge h5py`)
