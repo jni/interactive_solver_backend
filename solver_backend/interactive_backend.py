@@ -8,10 +8,10 @@ from .utils import cartesian_product
 
 
 # this sets the corresponding values in costs in-place
-def set_costs_from_uv_ids(graph, costs, uv_pairs, value):
+def set_costs_from_uv_ids(graph, costs, uv_pairs, values):
     edge_ids = graph.findEdges(uv_pairs)
     edge_ids = edge_ids[edge_ids != -1]
-    costs[edge_ids] = value
+    costs[edge_ids] = values[edge_ids != -1]
 
 
 def set_costs_from_cluster_ids(graph, costs, node_labeling, cluster_u, cluster_v, value):
@@ -24,4 +24,8 @@ def set_costs_from_cluster_ids(graph, costs, node_labeling, cluster_u, cluster_v
 
 
 def solver_backend():
+    # receive actions (merge/detach)
+    # adjust cost
+    # resolve
+    # send updated solution
     pass
