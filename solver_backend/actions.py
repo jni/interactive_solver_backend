@@ -36,6 +36,7 @@ class Action( object ):
 		return json.dumps( array )
 
 	def from_json_array( data ):
+		
 		if isinstance( data, str ):
 			data = json.loads( data )
 

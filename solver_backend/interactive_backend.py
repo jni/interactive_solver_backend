@@ -1,5 +1,7 @@
 from __future__ import division, print_function
 
+import itertools
+
 import nifty
 
 import numpy as np
@@ -10,6 +12,7 @@ import threading
 
 import zmq
 
+from .actions import *
 from .solver_utils import preprocess_with_random_forest, preprocess_with_simple_statistics
 from .solver_utils import solve_multicut, node_result_to_edge_result
 from .utils import cartesian_product
@@ -78,13 +81,18 @@ class SolverServer( object ):
 	            self.context       = None
 	            self.server_thread = None
 
-	def _merge( self, id1, id2 ):
-		# print( "MERGE", id1, id2 )
-		set_costs_from_uv_ids( self.graph, self.costs, np.array([[id1, id2]]).astype(np.int32), self.attractive_cost )
+	def _merge( self, *ids ):
+		# https://stackoverflow.com/a/942551/1725687
+		node_pairs = np.array( list( itertools.combinations( ids, 2 ) ) )
+		set_costs_from_uv_ids( self.graph, self.costs, node_pairs.astype(np.int32), self.attractive_cost )
 
-	def _detach( self, id ):
-		relevant_edges = [ edge for (node, edge) in self.graph.nodeAdjacency( id ) ]
-		self.costs[ relevant_edges ] = self.repulsive_cost
+	def _detach( self, fragment_id, *detach_from ):
+		if len( detach_from ) == 0:
+			relevant_edges = [ edge for (node, edge) in self.graph.nodeAdjacency( fragment_id ) ]
+			self.costs[ relevant_edges ] = self.repulsive_cost
+		else:
+			node_pairs = [ [fragment_id, d ] for d in detach_from ]
+			set_costs_from_uv_ids( self.graph, self.costs, node_pairs.astype(np.int32), self.repulsive_cost )
 
 	def _solution_to_message( self ):
 		# print('translatingsolutino to message', self.current_solution, self.current_solution.shape)
@@ -97,28 +105,18 @@ class SolverServer( object ):
 
 	def _solve( self, timeout ):
 		while self.is_running():
-			request = self.socket.recv()
+			request = self.socket.recv_string()
 			length  = len( request )
-			# print( 'received message:', request, length )
 			with self.lock:
-				# print( 'preparing to send message!')
-				if length > 0:
-					offset  = 0
-					while offset < length:
-						action_type = struct.unpack_from( 'Q', request, offset=offset )[0]
-						# print( "ACTION TYPE", action_type )
-						offset += 8
-						if action_type == 0:
-							pass
-						elif action_type == 1:
-							id1, id2 = struct.unpack_from( 'QQ', request, offset=offset )
-							# print( "WTH", id1, id2, offset )
-							self._merge( id1, id2 )
-							offset += 2 * 8
-						elif action_type == 2:
-							self._detach( *struct.unpack_from( 'Q', request, offset=offset ) )
-							offset += 1 * 8
 
+				if length > 0:
+					actions = Action.from_json_array( request )
+					offset  = 0
+					for action in actions:
+						if isinstance( action, Detach ):
+							self._detach( action.fragment_id, *action.detach_from )
+						elif isinstance( action, Merge ):
+							self._merge( *action.ids )
 					self.current_solution = solve_multicut( self.graph, self.costs )
 
 				# print('sending message!')

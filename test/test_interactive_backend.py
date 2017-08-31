@@ -1,5 +1,6 @@
 import collections
 import ctypes
+import json
 import numpy as np
 import nifty
 import os
@@ -12,7 +13,7 @@ import zmq
 # hacky import
 import sys
 sys.path.append('..')
-from solver_backend import set_costs_from_uv_ids, learn_rf, preprocess_with_random_forest, interactive_backend
+from solver_backend import set_costs_from_uv_ids, learn_rf, preprocess_with_random_forest, interactive_backend, actions
 
 
 
@@ -45,6 +46,7 @@ def relabel_to_smallest_member( solution ):
         d[ seg ].append( frag )
     minimum_id_segments = { seg : min( frags ) for (seg, frags) in d.items() }
     return np.vectorize( minimum_id_segments.get )( solution )
+
 
 class TestInteractiveBackend(unittest.TestCase):
 
@@ -79,14 +81,14 @@ class TestInteractiveBackend(unittest.TestCase):
         print( "Check merge!" )
         id1 = 7
         id2 = 3
-        socket.send( _merge( id1, id2  ) )
+        socket.send_string( json.dumps( [ json.loads( _merge( id1, id2  ).to_json() ) ] ) )
         solution = np.frombuffer( socket.recv(), dtype=np.uint64 )
         self.assertTrue( np.all( relabel_to_smallest_member( solution ) == np.array( [ 0, 1, 2, 2, 4, 4, 2, 2, 4, 4 ] ) ) )
 
         # send detach and evaluate
         print( "Check detach!" )
         frag_id = 4
-        socket.send( _detach( frag_id ) )
+        socket.send_string( json.dumps( [ json.loads( _detach( frag_id ).to_json() ) ] ) )
         solution = np.frombuffer( socket.recv(), dtype=np.uint64 )
         self.assertTrue( np.all( relabel_to_smallest_member( solution ) == np.array( [ 0, 1, 2, 2, 4, 5, 2, 2, 8, 5 ] ) ) )
 
@@ -103,12 +105,11 @@ def _np_arr_to_graph( arr ):
 	g.deserialize( arr )
 	return g
 
-def _merge( id1, id2 ):
-    # buf = ctypes.create_string_buffer( 1 * 4 + 2 * 8 )
-    return struct.pack( 'QQQ', 1, id1, id2 )
+def _merge( *ids ):
+    return actions.Merge( *ids )
 
 def _detach( frag_id ):
-    return struct.pack( 'QQ', 2, frag_id )
+    return actions.Detach( frag_id )
 
 if __name__ == '__main__':
     unittest.main()
