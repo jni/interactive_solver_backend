@@ -2,6 +2,8 @@ from __future__ import division, print_function
 
 import itertools
 
+import logging
+
 import nifty
 
 import numpy as np
@@ -17,11 +19,16 @@ from .solver_utils import preprocess_with_random_forest, preprocess_with_simple_
 from .solver_utils import solve_multicut, node_result_to_edge_result
 from .utils import cartesian_product
 
+# logging.basicConfig( level=logging.DEBUG )
+
 class SolverServer( object ):
 
 	def __init__( self, graph, costs, address, initial_solution, repulsive_cost=-100, attractive_cost=+100 ):
 
 	    super( SolverServer, self ).__init__()
+	    
+	    self.logger = logging.getLogger( __name__ )
+	    self.logger.debug( 'Instantiating server!' )
 
 	    self.graph          = graph
 	    self.costs          = np.copy( costs )
@@ -35,8 +42,10 @@ class SolverServer( object ):
 	    self.attractive_cost = attractive_cost
 
 	    # print( "Creating initial solution!" )
+	    self.logger.debug( 'Creating initial solution!' )
 	    self.initial_solution = initial_solution( self.graph, self.costs )
 	    self.current_solution = self.initial_solution
+	    self.logger.debug( 'Created initial solution: {} {}'.format( self.initial_solution, np.unique( self.initial_solution ).shape ) )
 	    # print( "Created initial solution!" )
 
 	    self.condition_object = threading.Event()
@@ -49,16 +58,20 @@ class SolverServer( object ):
 	        return not self.interrupted
 
 	def start( self, ioThreads=1, timeout=10 ):
-	    with self.lock:
-	        if not self.is_running():
-	            self.interrupted   = False
-	            self.context       = zmq.Context.instance( ioThreads )
-	            self.socket        = self.context.socket( zmq.REP )
-	            self.socket.bind( self.address )
 
-	            target             = lambda : self._solve( timeout )
-	            self.server_thread = threading.Thread( target=target )
-	            self.server_thread.start()
+	    
+		self.logger.debug( 'Starting server!' )
+		with self.lock:
+			if not self.is_running():
+				self.interrupted   = False
+				self.context       = zmq.Context.instance( ioThreads )
+				self.socket        = self.context.socket( zmq.REP )
+				self.socket.bind( self.address )
+
+				target             = lambda : self._solve( timeout )
+				self.server_thread = threading.Thread( target=target )
+				self.server_thread.start()
+		self.logger.debug( 'Started server!' )
 
 	def stop( self ):
 
@@ -105,8 +118,10 @@ class SolverServer( object ):
 
 	def _solve( self, timeout ):
 		while self.is_running():
+			self.logger.debug( 'Waiting for request at {}'.format( self.address ) )
 			request = self.socket.recv_string()
 			length  = len( request )
+			self.logger.debug( 'Received request of length {}: `{}`.'.format( length, request ) )
 			with self.lock:
 
 				if length > 0:
@@ -117,9 +132,13 @@ class SolverServer( object ):
 							self._detach( action.fragment_id, *action.detach_from )
 						elif isinstance( action, Merge ):
 							self._merge( *action.ids )
-					self.current_solution = solve_multicut( self.graph, self.costs )
+					self.logger.debug( 'Updated costs, resolving!' )
+					solution = solve_multicut( self.graph, self.costs )
+					self.logger.debug( 'Updated solution and previous solution differ at {} places'.format( np.sum( solution != self.current_solution ) ) )
+					self.current_solution = solution
 
 				# print('sending message!')
+				self.logger.debug( 'Responding with current solution!' )
 				self.socket.send( self._solution_to_message() )
 				# print( 'sent message!' )
 
