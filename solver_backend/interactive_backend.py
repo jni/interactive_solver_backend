@@ -114,7 +114,10 @@ class SolverServer( object ):
 		# for k, v in enumerate( self.current_solution ):
 		# 	struct.pack_into( 'QQ', message, 2 * 8 * k, k, v )
 		# return message
-		return self.current_solution.tobytes()
+		# return self.current_solution.byteswap().tobytes()
+		# java always big endian
+		# https://stackoverflow.com/questions/981549/javas-virtual-machines-endianness
+		return self.current_solution.byteswap().tobytes()
 
 	def _solve( self, timeout ):
 		while self.is_running():

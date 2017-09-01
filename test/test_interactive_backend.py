@@ -72,8 +72,9 @@ class TestInteractiveBackend(unittest.TestCase):
         # get solution from no action
         print( "Check initial solution!" )
         socket.send_string( '' )
-        initial_solution = np.frombuffer( socket.recv(), dtype=np.uint64 )
+        initial_solution = np.frombuffer( socket.recv(), dtype=np.uint64 ).byteswap()
 
+        # print( initial_solution, server.current_solution )
         self.assertTrue( np.all( initial_solution == server.current_solution ) )
         self.assertTrue( np.all( relabel_to_smallest_member( initial_solution ) == original_labeling ) )
 
@@ -82,14 +83,14 @@ class TestInteractiveBackend(unittest.TestCase):
         id1 = 7
         id2 = 3
         socket.send_string( json.dumps( [ json.loads( _merge( id1, id2  ).to_json() ) ] ) )
-        solution = np.frombuffer( socket.recv(), dtype=np.uint64 )
+        solution = np.frombuffer( socket.recv(), dtype=np.uint64 ).byteswap()
         self.assertTrue( np.all( relabel_to_smallest_member( solution ) == np.array( [ 0, 1, 2, 2, 4, 4, 2, 2, 4, 4 ] ) ) )
 
         # send detach and evaluate
         print( "Check detach!" )
         frag_id = 4
         socket.send_string( json.dumps( [ json.loads( _detach( frag_id ).to_json() ) ] ) )
-        solution = np.frombuffer( socket.recv(), dtype=np.uint64 )
+        solution = np.frombuffer( socket.recv(), dtype=np.uint64 ).byteswap()
         self.assertTrue( np.all( relabel_to_smallest_member( solution ) == np.array( [ 0, 1, 2, 2, 4, 5, 2, 2, 8, 5 ] ) ) )
 
         socket.close()
