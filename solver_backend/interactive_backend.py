@@ -26,7 +26,7 @@ class SolverServer( object ):
 	def __init__( self, graph, costs, address, initial_solution, repulsive_cost=-100, attractive_cost=+100 ):
 
 	    super( SolverServer, self ).__init__()
-	    
+
 	    self.logger = logging.getLogger( __name__ )
 	    self.logger.debug( 'Instantiating server!' )
 
@@ -59,7 +59,7 @@ class SolverServer( object ):
 
 	def start( self, ioThreads=1, timeout=10 ):
 
-	    
+
 		self.logger.debug( 'Starting server!' )
 		with self.lock:
 			if not self.is_running():
@@ -96,8 +96,11 @@ class SolverServer( object ):
 
 	def _merge( self, *ids ):
 		# https://stackoverflow.com/a/942551/1725687
-		node_pairs = np.array( list( itertools.combinations( ids, 2 ) ) )
-		set_costs_from_uv_ids( self.graph, self.costs, node_pairs.astype(np.int32), self.attractive_cost )
+		#node_pairs = np.array( list( itertools.combinations( ids, 2 ) ) )
+		#set_costs_from_uv_ids( self.graph, self.costs, node_pairs.astype(np.int32), self.attractive_cost )
+                # new faster version
+                set_costs_from_node_list( self.graph, self.costs, node_pairs.astype(np.int32), self.attractive_cost )
+
 
 	def _detach( self, fragment_id, *detach_from ):
 		if len( detach_from ) == 0:
@@ -155,6 +158,11 @@ def set_costs_from_uv_ids(graph, costs, uv_pairs, values):
     # print( 'any valid edges', valid_edges, np.any( valid_edges ) )
 
     costs[edge_ids] = values[ valid_edges ] if isinstance( values, (np.ndarray, list, tuple) ) else values
+
+
+def set_costs_from_node_list(graph, costs, node_list, value):
+    edge_ids = graph.edgesFromNodeList(node_list)
+    costs[edge_ids] = value
 
 
 def set_costs_from_cluster_ids(graph, costs, node_labeling, cluster_u, cluster_v, value):
