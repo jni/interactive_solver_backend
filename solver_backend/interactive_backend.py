@@ -96,6 +96,8 @@ class SolverServer( object ):
 
 	def _merge( self, *ids ):
 		# https://stackoverflow.com/a/942551/1725687
+		if len( ids ) < 2:
+			return
 		node_pairs = np.array( list( itertools.combinations( ids, 2 ) ) )
 		set_costs_from_uv_ids( self.graph, self.costs, node_pairs.astype(np.int32), self.attractive_cost )
 
