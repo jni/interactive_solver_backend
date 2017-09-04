@@ -71,7 +71,7 @@ class SetCostsOnAction( ActionHandler ):
 		else:
 			node_pairs = [ [fragment_id, d ] for d in detach_from ]
 
-			edge_ids    = graph.findEdges(uv_pairs)
+			edge_ids    = graph.findEdges( np.array( node_pairs ) )
 			valid_edges = edge_ids != -1
 
 			if np.any( valid_edges ):
@@ -105,7 +105,7 @@ class SolverServer( object ):
 	    self.current_solution = self.initial_solution
 	    self.logger.debug( 'Created initial solution: {} {}'.format( self.initial_solution, np.unique( self.initial_solution ).shape ) )
 	    # print( "Created initial solution!" )
-
+	    
 	    self.action_handler = action_handler
 
 	    self.condition_object = threading.Event()
