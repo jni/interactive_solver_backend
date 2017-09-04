@@ -21,9 +21,70 @@ from .utils import cartesian_product
 
 # logging.basicConfig( level=logging.DEBUG )
 
+class ActionHandler( object ):
+
+	def handle_action( self, graph, costs, action ):
+		return graph, costs
+
+class SetCostsOnAction( ActionHandler ):
+
+	def __init__( self, repulsive_cost=-100, attractive_cost=+100 ):
+		super( SetCostsOnAction, self ).__init__()
+		self.repulsive_cost  = repulsive_cost
+		self.attractive_cost = attractive_cost
+
+	def handle_action( self, graph, costs, action ):
+		if isinstance( action, Detach ):
+			return self._detach( graph, costs, action.fragment_id, *action.detach_from )
+		elif isinstance( action, Merge ):
+			return self._merge( graph, costs, *action.ids )
+		else:
+			return graph, costs
+	
+	def _merge( self, graph, costs, *ids ):
+		# https://stackoverflow.com/a/942551/1725687
+		if len( ids ) < 2:
+			return graph, costs
+		node_pairs = np.array( list( itertools.combinations( ids, 2 ) ) )
+
+		if len( node_pairs ) == 0:
+			return graph, costs
+		
+		edge_ids    = graph.findEdges( node_pairs )
+		valid_edges = edge_ids != -1
+
+		if not np.any( valid_edges ):
+			return graph, costs
+		
+		edge_ids          = edge_ids[ valid_edges ]
+		costs             = np.copy( costs )
+		costs[ edge_ids ] = self.attractive_cost
+		return graph, costs
+
+	def _detach( self, graph, costs, fragment_id, *detach_from ):
+		if len( detach_from ) == 0:
+			relevant_edges = [ edge for (node, edge) in graph.nodeAdjacency( fragment_id ) ]
+			if len( relevant_edges ) > 0:
+				costs = np.copy( costs )
+				costs[ relevant_edges ] = self.repulsive_cost
+				return graph, costs
+		else:
+			node_pairs = [ [fragment_id, d ] for d in detach_from ]
+
+			edge_ids    = graph.findEdges(uv_pairs)
+			valid_edges = edge_ids != -1
+
+			if np.any( valid_edges ):
+				edge_ids          = edge_ids[ valid_edges ]
+				costs             = np.copy( costs )
+				costs[ edge_ids ] = self.repulsive_cost
+				return graph, costs
+			
+		return graph, costs
+
 class SolverServer( object ):
 
-	def __init__( self, graph, costs, address, initial_solution, repulsive_cost=-100, attractive_cost=+100 ):
+	def __init__( self, graph, costs, address, initial_solution, action_handler=SetCostsOnAction() ):
 
 	    super( SolverServer, self ).__init__()
 	    
@@ -38,15 +99,14 @@ class SolverServer( object ):
 	    self.socket         = None
 	    self.server_thread  = None
 
-	    self.repulsive_cost  = repulsive_cost
-	    self.attractive_cost = attractive_cost
-
 	    # print( "Creating initial solution!" )
 	    self.logger.debug( 'Creating initial solution!' )
 	    self.initial_solution = initial_solution( self.graph, self.costs )
 	    self.current_solution = self.initial_solution
 	    self.logger.debug( 'Created initial solution: {} {}'.format( self.initial_solution, np.unique( self.initial_solution ).shape ) )
 	    # print( "Created initial solution!" )
+
+	    self.action_handler = action_handler
 
 	    self.condition_object = threading.Event()
 	    self.interrupted      = True
@@ -132,11 +192,13 @@ class SolverServer( object ):
 				if length > 0:
 					actions = Action.from_json_array( request )
 					offset  = 0
+					updated_graph_or_costs = False
 					for action in actions:
-						if isinstance( action, Detach ):
-							self._detach( action.fragment_id, *action.detach_from )
-						elif isinstance( action, Merge ):
-							self._merge( *action.ids )
+						graph, costs = self.action_handler.handle_action( self.graph, self.costs, action )
+						if graph is not self.graph or costs is not self.costs:
+							self.graph = graph
+							self.costs = costs
+							updated_graph_or_costs = True
 					self.logger.debug( 'Updated costs, resolving!' )
 					solution = solve_multicut( self.graph, self.costs )
 					self.logger.debug( 'Updated solution and previous solution differ at {} places'.format( np.sum( solution != self.current_solution ) ) )
@@ -168,11 +230,12 @@ def set_costs_from_cluster_ids(graph, costs, node_labeling, cluster_u, cluster_v
     set_costs_from_uv_ids(graph, costs, potential_uvs, value)
 
 
-def start_server( graph, costs, address, ioThreads=1, timeout=10, initial_solution=lambda graph, costs : solve_multicut( graph, costs ) ):
+def start_server( graph, costs, address, ioThreads=1, timeout=10, initial_solution=lambda graph, costs : solve_multicut( graph, costs ), action_handler=SetCostsOnAction() ):
     server = SolverServer(
         graph=graph,
         costs=costs,
         address=address,
-        initial_solution=initial_solution )
+        initial_solution=initial_solution,
+        action_handler=action_handler )
     server.start( ioThreads=ioThreads, timeout=timeout)
     return server
