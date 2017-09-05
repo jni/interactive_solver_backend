@@ -63,7 +63,6 @@ class TestSolverUtils(unittest.TestCase):
         seg = read_hdf5(inputs['seg'], 'data')
         rag = nrag.gridRag(seg)
         features = compute_edge_features(rag, inputs['raw'], 'data', 8)
-        np.save( '/data/hanslovskyp/constantin-example-data/data/edge-features.npy', features, allow_pickle=False )
 
         self.assertEqual(len(features), rag.numberOfEdges)
         self.assertFalse(np.isnan(features).any())
