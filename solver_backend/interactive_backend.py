@@ -23,6 +23,20 @@ from .utils import cartesian_product
 
 class ActionHandler( object ):
 
+	def __init__( self ):
+	    self.logger = logging.getLogger( __name__ )
+
+	def get_solution( self, graph, costs, actions ):
+		graph_changed = False
+		for action in actions:
+			g, c = self.handle_action( graph, costs, action )
+			if g is not graph or c is not costs:
+				graph, costs, graph_changed = g, c, True
+		if graph_changed:
+			self.logger.debug( 'Updated costs, resolving!' )
+			solution = solve_multicut( graph, costs )
+		return solution, graph, costs
+
 	def handle_action( self, graph, costs, action ):
 		return graph, costs
 
@@ -191,19 +205,9 @@ class SolverServer( object ):
 
 				if length > 0:
 					actions = Action.from_json_array( request )
-					offset  = 0
-					updated_graph_or_costs = False
-					for action in actions:
-						graph, costs = self.action_handler.handle_action( self.graph, self.costs, action )
-						if graph is not self.graph or costs is not self.costs:
-							self.graph = graph
-							self.costs = costs
-							updated_graph_or_costs = True
-					self.logger.debug( 'Updated costs, resolving!' )
-					solution = solve_multicut( self.graph, self.costs )
+					solution, self.graph, self.costs = self.action_handler.get_solution( self.graph, self.costs, actions )
 					self.logger.debug( 'Updated solution and previous solution differ at {} places'.format( np.sum( solution != self.current_solution ) ) )
 					self.current_solution = solution
-
 				# print('sending message!')
 				self.logger.debug( 'Responding with current solution!' )
 				self.socket.send( self._solution_to_message() )
