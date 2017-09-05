@@ -8,6 +8,8 @@ import nifty
 
 import numpy as np
 
+import sklearn.ensemble
+
 import struct
 
 import threading
@@ -26,7 +28,7 @@ class ActionHandler( object ):
 	def __init__( self ):
 	    self.logger = logging.getLogger( __name__ )
 
-	def get_solution( self, graph, costs, actions ):
+	def get_solution( self, graph, costs, actions, previous_solution ):
 		graph_changed = False
 		for action in actions:
 			g, c = self.handle_action( graph, costs, action )
@@ -35,6 +37,9 @@ class ActionHandler( object ):
 		if graph_changed:
 			self.logger.debug( 'Updated costs, resolving!' )
 			solution = solve_multicut( graph, costs )
+		else:
+			self.logger.debug( 'No changes, using previous solution!' )
+			solution = previous_solution
 		return solution, graph, costs
 
 	def handle_action( self, graph, costs, action ):
@@ -93,6 +98,114 @@ class SetCostsOnAction( ActionHandler ):
 				costs             = np.copy( costs )
 				costs[ edge_ids ] = self.repulsive_cost
 				return graph, costs
+			
+		return graph, costs
+
+class TrainRandomForestFromAction( ActionHandler ):
+
+	merge_label    = 0
+	separate_label = 1
+
+	def __init__( self, edge_features, edge_labels = None, rf = None ):
+		super( TrainRandomForestFromAction, self ).__init__()
+		self.logger = logging.getLogger( '{}.{}'.format( self.__module__, type( self ).__name__ ) )
+		self.logger.debug( 'Insantiating {}'.format( type( self ).__name__ ) )
+		self.rf            = sklearn.ensemble.RandomForestClassifier() if rf is None else rf
+		self.edge_features = edge_features
+		self.edge_labels   = {} if edge_labels is None else edge_labels
+		self.trained_model = False
+
+	def get_solution( self, graph, costs, actions, solution ):
+		self.logger.debug( 'Getting solution' )
+		graph_changed = False
+		edge_labels   = self.edge_labels.copy()
+
+		if len( actions ) == 0:
+			return graph, costs, actions
+		
+		for action in actions:
+			g, c = self.handle_action( graph, costs, action )
+
+		self.logger.debug( 'Did handle actions -- did edge labels change? %s -- %s', edge_labels, self.edge_labels )
+
+		current_edge_labels = np.unique( list( self.edge_labels.values() ) )
+		self.logger.debug( 'Edge labels in data: %s', current_edge_labels )
+
+		self.logger.debug( 'Already trained model? %s', self.trained_model )
+
+		if len( self.edge_labels ) > 1 and \
+			np.all(  current_edge_labels == np.array( [ 0, 1 ] ) ) and \
+			( self.edge_labels != edge_labels or not self.trained_model ):
+			self.logger.debug( 'Training classifier, re-solving!' )
+			features = []
+			labels   = []
+			for k, v in self.edge_labels.items():
+				features.append( self.edge_features[ k, ... ] )
+				labels.append( v )
+			features = np.array( features )
+			labels = np.array( labels )
+			self.logger.debug( 'Training classifier on features and labels: %s (%s), %s', features.shape, self.edge_features.shape, labels.shape )
+			self.rf.fit( features, labels )
+			self.trained_model = True
+		if self.trained_model:
+			probabilities = self.rf.predict_proba( self.edge_features )[ :, 1 ]
+			self.logger.debug( 'Predicted probabilities: %s (edge features) %s (probabilities) %d (number of edges) %s (probabilities)', self.edge_features.shape, probabilities.shape, graph.numberOfEdges, probabilities )
+			p_min = 0.001
+			p_max = 1. - p_min
+			probabilities = ( p_max - p_min ) * probabilities + p_min
+			costs = np.log( ( 1.0 - probabilities ) / probabilities )
+			solution = solve_multicut( graph, costs )
+		return solution, graph, costs
+
+	def handle_action( self, graph, costs, action ):
+		self.logger.debug( 'Handling action %s', action )
+		if isinstance( action, Detach ):
+			return self._detach( graph, costs, action.fragment_id, *action.detach_from )
+		elif isinstance( action, Merge ):
+			return self._merge( graph, costs, *action.ids )
+		else:
+			return graph, costs
+	
+	def _merge( self, graph, costs, *ids ):
+		self.logger.debug( 'Merging ids: %s', ids )
+		# https://stackoverflow.com/a/942551/1725687
+		if len( ids ) < 2:
+			return graph, costs
+		node_pairs = np.array( list( itertools.combinations( ids, 2 ) ) )
+
+		if len( node_pairs ) == 0:
+			return graph, costs
+		
+		edge_ids    = graph.findEdges( node_pairs )
+		valid_edges = edge_ids != -1
+
+		if not np.any( valid_edges ):
+			return graph, costs
+		
+		locations = edge_ids[ valid_edges ]
+		self.logger.debug( 'Merges edges with ids: %s', locations )
+		for edge_id in locations:
+			self.edge_labels[ edge_id ] = TrainRandomForestFromAction.merge_label
+		
+		return graph, costs
+
+	def _detach( self, graph, costs, fragment_id, *detach_from ):
+		self.logger.debug( 'Detaching: %d from %s', fragment_id, detach_from )
+		if len( detach_from ) == 0:
+			relevant_edges = [ edge for (node, edge) in graph.nodeAdjacency( fragment_id ) ]
+			for edge in relevant_edges:
+				self.edge_labels[ edge ] = TrainRandomForestFromAction.separate_label
+		else:
+			node_pairs = [ [fragment_id, d ] for d in detach_from ]
+
+			edge_ids    = graph.findEdges( np.array( node_pairs ) )
+			valid_edges = edge_ids != -1
+
+			if np.any( valid_edges ):
+				locations = edge_ids[ valid_edges ]
+				self.logger.debug( 'Detaching edges with ids: %s', locations )
+				for edge_id in locations:
+					self.edge_labels[ edge_id ] = TrainRandomForestFromAction.separate_label
 			
 		return graph, costs
 
@@ -205,7 +318,7 @@ class SolverServer( object ):
 
 				if length > 0:
 					actions = Action.from_json_array( request )
-					solution, self.graph, self.costs = self.action_handler.get_solution( self.graph, self.costs, actions )
+					solution, self.graph, self.costs = self.action_handler.get_solution( self.graph, self.costs, actions, self.current_solution )
 					self.logger.debug( 'Updated solution and previous solution differ at {} places'.format( np.sum( solution != self.current_solution ) ) )
 					self.current_solution = solution
 				# print('sending message!')
