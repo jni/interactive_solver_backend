@@ -283,16 +283,15 @@ class SolverServer( object ):
 
 	def _merge( self, *ids ):
 
-                if len( ids ) < 2:
+		if len( ids ) < 2:
 			return
 
-                # old implementation
-                # https://stackoverflow.com/a/942551/1725687
+		# old implementation
+		# https://stackoverflow.com/a/942551/1725687
 		#node_pairs = np.array( list( itertools.combinations( ids, 2 ) ) )
 		#set_costs_from_uv_ids( self.graph, self.costs, node_pairs.astype(np.int32), self.attractive_cost )
-
-                # new faster implementation
-                set_costs_from_node_list( self.graph, self.costs, node_pairs.astype(np.int32), self.attractive_cost )
+		# new faster implementation
+		set_costs_from_node_list( self.graph, self.costs, node_pairs.astype(np.int32), self.attractive_cost )
 
 	def _detach( self, fragment_id, *detach_from ):
 		if len( detach_from ) == 0:
