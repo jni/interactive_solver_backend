@@ -124,7 +124,7 @@ class TrainRandomForestFromAction( ActionHandler ):
 			return graph, costs, actions
 		
 		for action in actions:
-			g, c = self.handle_action( graph, costs, action )
+			self.handle_action( graph, costs, action )
 
 		self.logger.debug( 'Did handle actions -- did edge labels change? %s -- %s', edge_labels, self.edge_labels )
 
