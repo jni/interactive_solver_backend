@@ -29,77 +29,83 @@ class ActionHandler( object ):
 	    self.logger = logging.getLogger( __name__ )
 
 	def get_solution( self, graph, costs, actions, previous_solution ):
-		graph_changed = False
-		for action in actions:
-			g, c = self.handle_action( graph, costs, action )
-			if g is not graph or c is not costs:
-				graph, costs, graph_changed = g, c, True
-		if graph_changed:
-			self.logger.debug( 'Updated costs, resolving!' )
-			solution = solve_multicut( graph, costs )
-		else:
-			self.logger.debug( 'No changes, using previous solution!' )
-			solution = previous_solution
-		return solution, graph, costs
+		return np.array( [] ).astype( np.uint64 )
 
-	def handle_action( self, graph, costs, action ):
-		return graph, costs
+	def submit_actions( self, actions ):
+		pass
 
 class SetCostsOnAction( ActionHandler ):
 
-	def __init__( self, repulsive_cost=-100, attractive_cost=+100 ):
+	def __init__( self, graph, costs, solution, repulsive_cost=-100, attractive_cost=+100 ):
 		super( SetCostsOnAction, self ).__init__()
+
+		self.logger = logging.getLogger( '{}.{}'.format( self.__module__, type( self ).__name__ ) )
+		
+		self.graph           = graph
+		self.costs           = costs
+		self.solution        = solution
 		self.repulsive_cost  = repulsive_cost
 		self.attractive_cost = attractive_cost
+		self.needs_mc_solve  = False
 
-	def handle_action( self, graph, costs, action ):
+	def submit_actions( self, actions ):
+		for action in actions:
+			self.handle_action( action )
+
+	def handle_action( self, action ):
 		if isinstance( action, Detach ):
-			return self._detach( graph, costs, action.fragment_id, *action.detach_from )
+			self._detach( action.fragment_id, *action.detach_from )
 		elif isinstance( action, Merge ):
-			return self._merge( graph, costs, *action.ids )
-		else:
-			return graph, costs
+			self._merge( *action.ids )
+
+	def get_solution( self ):
+		if self.needs_mc_solve:
+			self.solution = solve_multicut( self.graph, self.costs )
+			self.needs_mc_solve = False
+		return self.solution
+			
 	
-	def _merge( self, graph, costs, *ids ):
+	def _merge( self, *ids ):
 		# https://stackoverflow.com/a/942551/1725687
 		if len( ids ) < 2:
-			return graph, costs
+			return
+
 		node_pairs = np.array( list( itertools.combinations( ids, 2 ) ) )
 
 		if len( node_pairs ) == 0:
-			return graph, costs
+			return
 		
-		edge_ids    = graph.findEdges( node_pairs )
+		edge_ids    = self.graph.findEdges( node_pairs )
 		valid_edges = edge_ids != -1
 
 		if not np.any( valid_edges ):
-			return graph, costs
-		
-		edge_ids          = edge_ids[ valid_edges ]
-		costs             = np.copy( costs )
-		costs[ edge_ids ] = self.attractive_cost
-		return graph, costs
+			return
 
-	def _detach( self, graph, costs, fragment_id, *detach_from ):
+		self.logger.debug( "Found edge_ids: %s", edge_ids )
+		self.logger.debug( "Valid edge_ids: %s", valid_edges )
+		edge_ids               = edge_ids[ valid_edges ]
+		self.logger.debug( "Setting edge_ids %s to %s", edge_ids, self.attractive_cost )
+		self.logger.debug( "Costs: %s %s", self.costs, type( self.costs ) )
+		self.costs[ edge_ids ] = self.attractive_cost
+		self.needs_mc_solve    = True
+
+	def _detach( self, fragment_id, *detach_from ):
 		if len( detach_from ) == 0:
-			relevant_edges = [ edge for (node, edge) in graph.nodeAdjacency( fragment_id ) ]
+			relevant_edges = [ edge for (node, edge) in self.graph.nodeAdjacency( fragment_id ) ]
 			if len( relevant_edges ) > 0:
-				costs = np.copy( costs )
-				costs[ relevant_edges ] = self.repulsive_cost
-				return graph, costs
+				self.costs[ relevant_edges ] = self.repulsive_cost
+				self.needs_mc_solve          = True
 		else:
-			node_pairs = [ [fragment_id, d ] for d in detach_from ]
+			node_pairs = [ [ fragment_id, d ] for d in detach_from ]
 
-			edge_ids    = graph.findEdges( np.array( node_pairs ) )
+			edge_ids    = self.graph.findEdges( np.array( node_pairs ) )
 			valid_edges = edge_ids != -1
 
 			if np.any( valid_edges ):
-				edge_ids          = edge_ids[ valid_edges ]
-				costs             = np.copy( costs )
-				costs[ edge_ids ] = self.repulsive_cost
-				return graph, costs
+				edge_ids               = edge_ids[ valid_edges ]
+				self.costs[ edge_ids ] = self.repulsive_cost
+				self.needs_mc_solve    = True
 			
-		return graph, costs
 
 class TrainRandomForestFromAction( ActionHandler ):
 
@@ -226,29 +232,20 @@ class TrainRandomForestFromAction( ActionHandler ):
 
 class SolverServer( object ):
 
-	def __init__( self, graph, costs, address, initial_solution, action_handler=SetCostsOnAction() ):
+	def __init__( self, address, action_handler ):
 
 	    super( SolverServer, self ).__init__()
 
 	    self.logger = logging.getLogger( '{}.{}'.format( self.__module__, type( self ).__name__ ) )
 	    self.logger.debug( 'Instantiating server!' )
 
-	    self.graph          = graph
-	    self.costs          = np.copy( costs )
-	    self.initial_costs  = costs
 	    self.address        = address
 	    self.context        = None
 	    self.socket         = None
 	    self.server_thread  = None
 
-	    # print( "Creating initial solution!" )
-	    self.logger.debug( 'Creating initial solution!' )
-	    self.initial_solution = initial_solution( self.graph, self.costs )
-	    self.current_solution = self.initial_solution
-	    self.logger.debug( 'Created initial solution: {} {}'.format( self.initial_solution, np.unique( self.initial_solution ).shape ) )
-	    # print( "Created initial solution!" )
-	    
-	    self.action_handler = action_handler
+	    self.current_solution = action_handler.get_solution()
+	    self.action_handler   = action_handler
 
 	    self.condition_object = threading.Event()
 	    self.interrupted      = True
@@ -296,26 +293,6 @@ class SolverServer( object ):
 	            self.context       = None
 	            self.server_thread = None
 
-	def _merge( self, *ids ):
-
-		if len( ids ) < 2:
-			return
-
-		# old implementation
-		# https://stackoverflow.com/a/942551/1725687
-		#node_pairs = np.array( list( itertools.combinations( ids, 2 ) ) )
-		#set_costs_from_uv_ids( self.graph, self.costs, node_pairs.astype(np.int32), self.attractive_cost )
-		# new faster implementation
-		set_costs_from_node_list( self.graph, self.costs, node_pairs.astype(np.int32), self.attractive_cost )
-
-	def _detach( self, fragment_id, *detach_from ):
-		if len( detach_from ) == 0:
-			relevant_edges = [ edge for (node, edge) in self.graph.nodeAdjacency( fragment_id ) ]
-			self.costs[ relevant_edges ] = self.repulsive_cost
-		else:
-			node_pairs = [ [fragment_id, d ] for d in detach_from ]
-			set_costs_from_uv_ids( self.graph, self.costs, node_pairs.astype(np.int32), self.repulsive_cost )
-
 	def _solution_to_message( self ):
 		# print('translatingsolutino to message', self.current_solution, self.current_solution.shape)
 		# message = bytes( 1 * 8 * self.current_solution.shape[0] )
@@ -339,11 +316,11 @@ class SolverServer( object ):
 				if length > 0:
 					actions = Action.from_json_array( request )
 					self.logger.debug( "Handling actions: %s", actions )
-					solution, self.graph, self.costs = self.action_handler.get_solution( self.graph, self.costs, actions, self.current_solution )
-					self.logger.debug( 'Updated solution and previous solution differ at {} places'.format( np.sum( solution != self.current_solution ) ) )
-					self.current_solution = solution
+					self.action_handler.submit_actions( actions )
+					# solution, self.graph, self.costs = self.action_handler.get_solution( self.graph, self.costs, actions, self.current_solution )
 				# print('sending message!')
 				self.logger.debug( 'Responding with current solution!' )
+				self.current_solution = self.action_handler.get_solution()
 				self.socket.send( self._solution_to_message() )
 				# print( 'sent message!' )
 
@@ -373,12 +350,9 @@ def set_costs_from_cluster_ids(graph, costs, node_labeling, cluster_u, cluster_v
     set_costs_from_uv_ids(graph, costs, potential_uvs, value)
 
 
-def start_server( graph, costs, address, ioThreads=1, timeout=10, initial_solution=lambda graph, costs : solve_multicut( graph, costs ), action_handler=SetCostsOnAction() ):
+def start_server( address, action_handler, ioThreads=1, timeout=10 ):
     server = SolverServer(
-        graph=graph,
-        costs=costs,
         address=address,
-        initial_solution=initial_solution,
         action_handler=action_handler )
     server.start( ioThreads=ioThreads, timeout=timeout)
     return server

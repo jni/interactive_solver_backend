@@ -1,6 +1,7 @@
 import collections
 import ctypes
 import json
+import logging.config
 import numpy as np
 import nifty
 import os
@@ -8,14 +9,17 @@ import struct
 import time
 import unittest
 import vigra
+import yaml
 import zmq
 
 # hacky import
 import sys
 sys.path.append('..')
-from solver_backend import set_costs_from_uv_ids, learn_rf, preprocess_with_random_forest, interactive_backend, actions
+from solver_backend import set_costs_from_uv_ids, learn_rf, preprocess_with_random_forest, interactive_backend, actions, solver_utils
 
-
+with open( '../logger.yaml', 'r' ) as f:
+	config = yaml.safe_load( f.read() )
+logging.config.dictConfig( config )
 
 edges = (
 	( 1, 4, -10 ),
@@ -54,8 +58,9 @@ class TestInteractiveBackend(unittest.TestCase):
     def test_server(self):
         print("Running test server...")
         graph, costs = to_graph( edges )
-        timeout    = 10
-        address = "inproc://mc-solver"
+        costs        = np.array( costs )
+        timeout      = 10
+        address      = "inproc://mc-solver"
 
         context = zmq.Context.instance( 1 )
         socket  = context.socket( zmq.REQ )
@@ -63,7 +68,8 @@ class TestInteractiveBackend(unittest.TestCase):
 
         print ("Starting server!" )
 
-        server  = interactive_backend.start_server( graph, costs, address, ioThreads=1, timeout=timeout )
+        action_handler = interactive_backend.SetCostsOnAction( graph, costs, solver_utils.solve_multicut( graph, costs ) )
+        server         = interactive_backend.start_server( address, action_handler, ioThreads=1, timeout=timeout )
 
         print( "Started server!", server.is_running() )
 
@@ -75,7 +81,7 @@ class TestInteractiveBackend(unittest.TestCase):
         initial_solution = np.frombuffer( socket.recv(), dtype=np.uint64 ).byteswap()
 
         # print( initial_solution, server.current_solution )
-        self.assertTrue( np.all( initial_solution == server.current_solution ) )
+        self.assertTrue( np.all( initial_solution == action_handler.solution ) )
         self.assertTrue( np.all( relabel_to_smallest_member( initial_solution ) == original_labeling ) )
 
         # send merge and evaluate
