@@ -163,6 +163,8 @@ class TrainRandomForestFromAction( ActionHandler ):
 			return self._detach( graph, costs, action.fragment_id, *action.detach_from )
 		elif isinstance( action, Merge ):
 			return self._merge( graph, costs, *action.ids )
+		elif isinstance( action, MergeAndDetach ):
+			return self._confirm_grouping( graph, costs, action.merge_ids, action.detach_from )
 		else:
 			return graph, costs
 	
@@ -208,6 +210,14 @@ class TrainRandomForestFromAction( ActionHandler ):
 					self.edge_labels[ edge_id ] = TrainRandomForestFromAction.separate_label
 			
 		return graph, costs
+
+	def _confirm_grouping( self, graph, costs, group_fragments, not_part_of_group_fragments ):
+		self.logger.debug( 'Confirming: %s (merge) %s (detach)', group_fragments, not_part_of_group_fragments )
+		if len( not_part_of_group_fragments ) > 0:
+			for fragment_id in group_fragments:
+				self._detach( graph, costs, fragment_id, *not_part_of_group_fragments )
+
+		self._merge( graph, costs, group_fragments )
 
 class SolverServer( object ):
 
