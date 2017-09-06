@@ -117,13 +117,18 @@ class TrainRandomForestFromAction( ActionHandler ):
 
 	def get_solution( self, graph, costs, actions, solution ):
 		self.logger.debug( 'Getting solution' )
+		self.logger.debug( 'Graph:    %s', graph )
+		self.logger.debug( 'Costs:    %s', costs )
+		self.logger.debug( 'actions:  %s (%d)', actions, len( actions ) )
+		self.logger.debug( 'solution: %s', solution )
 		graph_changed = False
 		edge_labels   = self.edge_labels.copy()
 
 		if len( actions ) == 0:
 			return graph, costs, actions
-		
+
 		for action in actions:
+			self.logger.debug( "Handling action: %s", action )
 			self.handle_action( graph, costs, action )
 
 		self.logger.debug( 'Did handle actions -- did edge labels change? %s -- %s', edge_labels, self.edge_labels )
@@ -333,6 +338,7 @@ class SolverServer( object ):
 
 				if length > 0:
 					actions = Action.from_json_array( request )
+					self.logger.debug( "Handling actions: %s", actions )
 					solution, self.graph, self.costs = self.action_handler.get_solution( self.graph, self.costs, actions, self.current_solution )
 					self.logger.debug( 'Updated solution and previous solution differ at {} places'.format( np.sum( solution != self.current_solution ) ) )
 					self.current_solution = solution
