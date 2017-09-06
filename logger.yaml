@@ -9,6 +9,11 @@ handlers:
     console:
         class: logging.StreamHandler
         formatter: simple
+    file:
+        class: logging.handlers.RotatingFileHandler
+        formatter: simple
+        filename: log.log
+        maxBytes: 4096
 
 root:
     level: DEBUG
