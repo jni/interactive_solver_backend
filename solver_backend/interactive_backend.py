@@ -225,7 +225,7 @@ class SolverServer( object ):
 
 	    super( SolverServer, self ).__init__()
 
-	    self.logger = logging.getLogger( __name__ )
+	    self.logger = logging.getLogger( '{}.{}'.format( self.__module__, type( self ).__name__ ) )
 	    self.logger.debug( 'Instantiating server!' )
 
 	    self.graph          = graph
