@@ -46,10 +46,9 @@ if __name__ == "__main__":
 		return solution
 
 	edge_features  = np.load( args.features, allow_pickle=False )
-	print( 'OI!', edge_features.shape, graph.numberOfEdges )
-	action_handler = solver_backend.TrainRandomForestFromAction( edge_features=edge_features )
 	costs          = np.zeros( ( graph.numberOfEdges, ), dtype=np.float64 )
-	server         = solver_backend.SolverServer( graph, costs, address, lambda graph, costs : np.arange( graph.numberOfNodes ), action_handler=action_handler )
+	action_handler = solver_backend.TrainRandomForestFromAction( graph, costs,edge_features=edge_features )
+	server         = solver_backend.SolverServer( address, action_handler=action_handler )
 	server.start()
 
 	def handle_signal_interrupt( signal, frame ):
