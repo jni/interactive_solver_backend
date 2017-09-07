@@ -30,7 +30,7 @@ class ActionHandler(object):
 
 class SetCostsOnAction(ActionHandler):
 
-        def __init__(self, graph, costs, solution, repulsive_cost=-100, attractive_cost=+100):
+    def __init__(self, graph, costs, solution, repulsive_cost=-100, attractive_cost=+100):
         super(SetCostsOnAction, self).__init__()
 
         self.logger = logging.getLogger('{}.{}'.format(self.__module__, type(self).__name__))
