@@ -150,7 +150,7 @@ class TrainRandomForestFromAction( ActionHandler ):
 			self.retrain_rf    = False
 			probabilities      = self.rf.predict_proba( self.edge_features )[ :, 1 ]
 			# rag is still argument for compute_edge_costs
-			self.costs         = compute_edge_costs( None, probabilities, self.edge_weights )
+			self.costs         = compute_edge_costs( probabilities, self.edge_weights )
 			self.solution      = solve_multicut( self.graph, self.costs )
 
 		return self.solution

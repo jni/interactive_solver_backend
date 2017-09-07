@@ -20,7 +20,7 @@ def node_result_to_edge_result(graph, node_result):
 
 
 # TODO boundary bias ?!
-def compute_edge_costs(rag, probabilities, edge_sizes=None, max_threads=-1):
+def compute_edge_costs(probabilities, edge_sizes=None, max_threads=-1):
 
     # scale the probabilities to avoid diverging costs
     # and transform to costs
@@ -62,7 +62,7 @@ def preprocess_with_callback(
     edge_sizes = nrag.accumulateMeanAndLength(
         rag, np.zeros(rag.shape, dtype='float'), numberOfThreads=max_threads
     )[0][:, 1]
-    costs = compute_edge_costs(rag, probabilities, edge_sizes=edge_sizes, max_threads=max_threads)
+    costs = compute_edge_costs(probabilities, edge_sizes=edge_sizes, max_threads=max_threads)
     return rag, costs
 
 
