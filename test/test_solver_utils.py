@@ -36,7 +36,7 @@ class TestSolverUtils(unittest.TestCase):
 
         # learn random forest
         learn_rf(
-            ['./data/raw.h5'], ['data'],
+	        ['./data/raw.h5'], ['data'],
             ['./data/seg.h5'], ['data'],
             ['./data/gt.h5'], ['data'],
             './data/rf.pkl', 100

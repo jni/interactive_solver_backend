@@ -18,31 +18,31 @@ sys.path.append('..')
 from solver_backend import set_costs_from_uv_ids, learn_rf, preprocess_with_random_forest, interactive_backend, actions, solver_utils
 
 with open( '../logger.yaml', 'r' ) as f:
-	config = yaml.safe_load( f.read() )
+    config = yaml.safe_load( f.read() )
 logging.config.dictConfig( config )
 
 edges = (
-	( 1, 4, -10 ),
-	( 2, 3, +10 ),
-	( 2, 6, +10 ),
-	( 3, 4, -10 ),
-	( 3, 7, -10 ),
-	( 4, 5, +10 ),
-	( 4, 8, +10 ),
-	( 5, 9, +10 )
-	)
+    ( 1, 4, -10 ),
+    ( 2, 3, +10 ),
+    ( 2, 6, +10 ),
+    ( 3, 4, -10 ),
+    ( 3, 7, -10 ),
+    ( 4, 5, +10 ),
+    ( 4, 8, +10 ),
+    ( 5, 9, +10 )
+    )
 
 original_labeling = [
-	0, 1, 2, 2, 4, 4, 2, 7, 4, 4
-	]
+    0, 1, 2, 2, 4, 4, 2, 7, 4, 4
+    ]
 
 def to_graph( edges ):
-	uvIds    = [ (edge[0], edge[1]) for edge in edges ]
-	costs    = [ edge[2] for edge in edges ]
-	node_ids = np.unique( uvIds + [(0,0)] )
-	graph = nifty.graph.UndirectedGraph( np.max( node_ids ) + 1 )
-	graph.insertEdges( uvIds )
-	return graph, costs
+    uvIds    = [ (edge[0], edge[1]) for edge in edges ]
+    costs    = [ edge[2] for edge in edges ]
+    node_ids = np.unique( uvIds + [(0,0)] )
+    graph = nifty.graph.UndirectedGraph( np.max( node_ids ) + 1 )
+    graph.insertEdges( uvIds )
+    return graph, costs
 
 def relabel_to_smallest_member( solution ):
     d = collections.defaultdict( list )
@@ -108,9 +108,9 @@ class TestInteractiveBackend(unittest.TestCase):
         print( "Stopped server!" )
 
 def _np_arr_to_graph( arr ):
-	g = nifty.graph.UndirectedGraph( np.unique( arr ).size )
-	g.deserialize( arr )
-	return g
+    g = nifty.graph.UndirectedGraph( np.unique( arr ).size )
+    g.deserialize( arr )
+    return g
 
 def _merge( *ids ):
     return actions.Merge( *ids )
