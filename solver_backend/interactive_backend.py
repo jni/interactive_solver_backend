@@ -223,7 +223,7 @@ class TrainRandomForestFromAction( ActionHandler ):
 			for fragment_id in group_fragments:
 				retrain_rf |= self._detach( fragment_id, *not_part_of_group_fragments )
 
-		retrain_rf |= self._merge( group_fragments )
+		retrain_rf |= self._merge( *group_fragments )
 
 		return retrain_rf
 
