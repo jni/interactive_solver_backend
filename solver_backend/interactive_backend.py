@@ -19,7 +19,7 @@ import zmq
 from .actions import *
 from .solver_utils import preprocess_with_random_forest, preprocess_with_simple_statistics
 from .solver_utils import solve_multicut, node_result_to_edge_result
-from.solver_utils import compute_edge_costs
+from .solver_utils import compute_edge_costs
 from .utils import cartesian_product
 
 # logging.basicConfig( level=logging.DEBUG )
