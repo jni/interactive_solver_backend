@@ -4,11 +4,10 @@ import nifty
 import numpy as np
 import os
 import signal
+import solver_backend
 import sys
 import time
 import yaml
-
-import solver_backend
 
 if __name__ == "__main__":
     import argparse

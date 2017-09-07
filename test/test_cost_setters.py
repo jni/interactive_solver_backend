@@ -1,11 +1,11 @@
+import itertools
+import nifty
+import numpy as np
+import sys
 import time
 import unittest
-import numpy as np
-import nifty
-import itertools
 
 # hacky import
-import sys
 sys.path.append('..')
 from solver_backend import set_costs_from_uv_ids, set_costs_from_node_list
 

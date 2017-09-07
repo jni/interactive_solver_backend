@@ -2,10 +2,11 @@ import collections
 import ctypes
 import json
 import logging.config
-import numpy as np
 import nifty
+import numpy as np
 import os
 import struct
+import sys
 import time
 import unittest
 import vigra
@@ -13,7 +14,6 @@ import yaml
 import zmq
 
 # hacky import
-import sys
 sys.path.append('..')
 from solver_backend import set_costs_from_uv_ids, learn_rf, preprocess_with_random_forest, interactive_backend, actions, solver_utils
 

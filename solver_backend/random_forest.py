@@ -1,12 +1,12 @@
 from __future__ import division, print_function
 
+import nifty.graph.rag as nrag
 import numpy as np
 import pickle
-import nifty.graph.rag as nrag
-from sklearn.ensemble import RandomForestClassifier
 
-from .utils import read_hdf5
 from .probability_callbacks import compute_edge_features
+from .utils                 import read_hdf5
+from sklearn.ensemble       import RandomForestClassifier
 
 
 def compute_edge_groundtuth(rag, gt_path, gt_key):

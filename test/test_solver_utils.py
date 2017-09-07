@@ -1,6 +1,7 @@
-import unittest
 import numpy as np
 import os
+import sys
+import unittest
 
 try:
     import nifty
@@ -10,7 +11,6 @@ except ImportError:
     import nifty_with_cplex.graph.rag as nrag
 
 # hacky import
-import sys
 sys.path.append('..')
 from solver_backend import compute_edge_features, learn_rf, solve_multicut, read_hdf5
 from solver_backend import preprocess_with_random_forest, preprocess_with_simple_statistics

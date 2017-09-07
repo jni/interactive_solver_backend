@@ -1,26 +1,19 @@
 from __future__ import division, print_function
 
 import itertools
-
 import logging
-
 import nifty
-
 import numpy as np
-
 import sklearn.ensemble
-
 import struct
-
 import threading
-
 import zmq
 
-from .actions import *
+from .actions      import *
 from .solver_utils import preprocess_with_random_forest, preprocess_with_simple_statistics
 from .solver_utils import solve_multicut, node_result_to_edge_result
 from .solver_utils import compute_edge_costs
-from .utils import cartesian_product
+from .utils        import cartesian_product
 
 # logging.basicConfig( level=logging.DEBUG )
 

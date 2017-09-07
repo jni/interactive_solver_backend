@@ -3,13 +3,13 @@ import logging.config
 import nifty
 import numpy as np
 import os
-import unittest
 import sys
+import unittest
 import yaml
 
 sys.path.append( '..' )
 
-import solver_backend.actions as actions
+import solver_backend.actions             as actions
 import solver_backend.interactive_backend as interactive_backend
 
 

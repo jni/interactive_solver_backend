@@ -8,10 +8,10 @@ except ImportError:
     import nifty_with_cplex.graph.optimization.multicut as nmc
 
 import numpy as np
-from functools import partial
 
-from .utils import read_hdf5
 from .probability_callbacks import random_forest_callback, edge_statistics_callback
+from .utils                 import read_hdf5
+from functools              import partial
 
 
 def node_result_to_edge_result(graph, node_result):

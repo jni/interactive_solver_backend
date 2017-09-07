@@ -1,5 +1,4 @@
 import collections
-
 import json
 
 identifier_to_class = collections.defaultdict( lambda : None, **{
