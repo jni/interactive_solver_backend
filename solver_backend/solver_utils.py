@@ -1,11 +1,7 @@
 from __future__ import division, print_function
 
-try:
-    import nifty.graph.rag as nrag
-    import nifty.graph.optimization.multicut as nmc
-except ImportError:
-    import nifty_with_cplex.graph.rag as nrag
-    import nifty_with_cplex.graph.optimization.multicut as nmc
+import nifty.graph.rag as nrag
+import nifty.graph.optimization.multicut as nmc
 
 import numpy as np
 

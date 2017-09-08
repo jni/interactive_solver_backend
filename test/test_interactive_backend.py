@@ -66,6 +66,8 @@ class TestInteractiveBackend(unittest.TestCase):
         socket  = context.socket(zmq.REQ)
         socket.connect(address)
 
+        version = '1'
+
         print("Starting server!")
 
         action_handler = interactive_backend.SetCostsOnAction(graph, costs, solver_utils.solve_multicut(graph, costs))
@@ -88,14 +90,14 @@ class TestInteractiveBackend(unittest.TestCase):
         print("Check merge!")
         id1 = 7
         id2 = 3
-        socket.send_string(json.dumps([json.loads(_merge(id1, id2).to_json())]))
+        socket.send_string(json.dumps({'version' : version, 'actions' : [json.loads(_merge(id1, id2).to_json())]}))
         solution = np.frombuffer(socket.recv(), dtype=np.uint64).byteswap()
         self.assertTrue(np.all(relabel_to_smallest_member(solution) == np.array([0, 1, 2, 2, 4, 4, 2, 2, 4, 4])))
 
         # send detach and evaluate
         print("Check detach!")
         frag_id = 4
-        socket.send_string(json.dumps([json.loads(_detach(frag_id).to_json())]))
+        socket.send_string(json.dumps({'version' : version, 'actions' : [json.loads(_detach(frag_id).to_json())] }))
         solution = np.frombuffer(socket.recv(), dtype=np.uint64).byteswap()
         self.assertTrue(np.all(relabel_to_smallest_member(solution) == np.array([0, 1, 2, 2, 4, 5, 2, 2, 8, 5])))
 

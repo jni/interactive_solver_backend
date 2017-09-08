@@ -53,6 +53,7 @@ if __name__ == "__main__":
     parser.add_argument('--features'       , '-f', default='/data/hanslovskyp/constantin-example-data/data/edge-features.npy')
     parser.add_argument('--address'        , '-a', default='ipc:///tmp/mc-solver')
     parser.add_argument('--logging-config' , '-l', default='/home/hanslovskyp/workspace/bigcat-future/interactive_solver_backend/logger.yaml')
+    parser.add_argument('--data-version'   , '-d', default='1')
 
     args    = parser.parse_args()
     costs   = np.load(args.costs, allow_pickle=False)
@@ -84,7 +85,7 @@ if __name__ == "__main__":
         versioning=DummyVersioning(),
         rf_read_write=DummyRFReadWrite(),
         versioned_graph_store=DummyVersionedGraphStore(graph, edge_features, weights),
-        version=1
+        version='1'
         )
     server         = solver_backend.SolverServer(address, action_handler=action_handler)
     server.start()

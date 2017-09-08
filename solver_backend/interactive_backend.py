@@ -26,7 +26,7 @@ class ActionHandler(object):
     def get_solution(self, graph, costs, actions, previous_solution):
         return np.array([]).astype(np.uint64)
 
-    def submit_actions(self, actions):
+    def submit_actions(self, version, actions):
         pass
 
     def update_graph(self, graph, costs, edge_features, edge_weights):
@@ -46,11 +46,11 @@ class SetCostsOnAction(ActionHandler):
         self.attractive_cost = attractive_cost
         self.needs_mc_solve  = False
 
-    def submit_actions(self, actions):
+    def submit_actions(self, version, actions):
         for action in actions:
-            self.handle_action(action)
+            self.handle_action(version, action)
 
-    def handle_action(self, action):
+    def handle_action(self, version, action):
         if isinstance(action, Detach):
             self._detach(action.fragment_id, *action.detach_from)
         elif isinstance(action, Merge):
@@ -125,12 +125,13 @@ class TrainRandomForestFromAction(ActionHandler):
         self.retrain_rf            = True
         self.solution              = None
         self.version               = version
-        self.actions               = []
+        self.actions               = collections.defaultdict(list)
         self.versioned_graph_store = versioned_graph_store
         self.versioning            = versioning
         self.graph                 = None
         self.edge_features         = None
         self.edge_weights          = None
+        self.rf_read_write         = rf_read_write
 
         self._update_graph()
 
@@ -162,10 +163,12 @@ class TrainRandomForestFromAction(ActionHandler):
             return features, labels
 
     def _get_features_and_labels_for_version(self, version):
-        actions       = self.actions if version == self.version else self.rf_read_write.get_actions(version)
-        graph         = self.graph if version == self.version else self.versioned_graph_store.get_graph(self.version)
-        edge_features = self.edge_features if version == self.version else self.versioned_graph_store.get_edge_features(self.version)
-        edge_labels   = {}
+        stored_actions = self.rf_read_write.get_actions(version)
+        local_actions  = self.actions[version]
+        actions        = stored_actions + local_actions
+        graph          = self.graph if version == self.version else self.versioned_graph_store.get_graph(self.version)
+        edge_features  = self.edge_features if version == self.version else self.versioned_graph_store.get_edge_features(self.version)
+        edge_labels    = {}
         for action in actions:
             self.handle_action(action, graph, edge_labels)
 
@@ -206,10 +209,10 @@ class TrainRandomForestFromAction(ActionHandler):
         return self.solution if self.solution is not None else np.arange( self.graph.numberOfNodes, dtype=np.uint64 )
 
 
-    def submit_actions(self, actions):
+    def submit_actions(self, version, actions):
         for action in actions:
             self.logger.debug("Handling action: %s", action)
-            self.actions.append(action)
+            self.actions[version].append(action)
         self.retrain_rf = True
 
     def handle_action(self, action, graph, edge_labels):
@@ -362,9 +365,11 @@ class SolverServer(object):
             with self.lock:
 
                 if length > 0:
-                    actions = Action.from_json_array(request)
+                    json_object = json.loads(request)
+                    version     = json_object['version']
+                    actions     = Action.from_json_array(json.dumps(json_object['actions']))
                     self.logger.debug("Handling actions: %s", actions)
-                    self.action_handler.submit_actions(actions)
+                    self.action_handler.submit_actions(version, actions)
                     # solution, self.graph, self.costs = self.action_handler.get_solution(self.graph, self.costs, actions, self.current_solution)
                 # print('sending message!')
                 self.logger.debug('Responding with current solution!')

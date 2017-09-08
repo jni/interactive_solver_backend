@@ -93,6 +93,7 @@ class TestRandomForest(unittest.TestCase):
         self.logger.debug('Testing confirm event!')
 
         graph, costs = to_graph(edges)
+        version      = '1'
 
         handler = interactive_backend.TrainRandomForestFromAction(
             versioning=DummyVersioning(),
@@ -109,10 +110,10 @@ class TestRandomForest(unittest.TestCase):
         handler.handle_action(action, handler.graph, edge_labels)
         self.assertEqual(len(edge_labels), 0, 'Expected zero length edge labels but got {}.'.format(edge_labels,))
 
-        handler.submit_actions([action])
+        handler.submit_actions(version, [action])
         self.assertEqual(len(handler.actions), 1)
-        self.assertIs(handler.actions[0], action)
-        handler.actions = []
+        self.assertIs(handler.actions[version][0], action)
+        handler.actions.clear()
 
         merge_ids   = (1, 3, 4)
         from_ids    = (5, 7, 8)
@@ -138,10 +139,10 @@ class TestRandomForest(unittest.TestCase):
 
         self.assertEqual(len(edge_labels), len(labels))
 
-        handler.submit_actions([action])
+        handler.submit_actions(version, [action])
         self.assertEqual(len(handler.actions), 1)
-        self.assertIs(handler.actions[0], action)
-        handler.actions = []
+        self.assertIs(handler.actions[version][0], action)
+        handler.actions.clear()
 
 
 if __name__ == '__main__':
