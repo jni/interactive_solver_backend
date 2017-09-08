@@ -1,5 +1,6 @@
 from __future__ import division, print_function
 
+import collections
 import itertools
 import logging
 import nifty
@@ -26,6 +27,9 @@ class ActionHandler(object):
         return np.array([]).astype(np.uint64)
 
     def submit_actions(self, actions):
+        pass
+
+    def update_graph(self, graph, costs, edge_features, edge_weights):
         pass
 
 class SetCostsOnAction(ActionHandler):
@@ -106,65 +110,119 @@ class TrainRandomForestFromAction(ActionHandler):
     merge_label    = 0
     separate_label = 1
 
-    def __init__(self, graph, costs, edge_features, edge_weights = None, edge_labels = None, rf = None, initial_solution = np.array([], dtype=np.uint64)):
+    def __init__(
+            self,
+            versioning,
+            rf_read_write,
+            versioned_graph_store,
+            version = None,
+            ):
         super(TrainRandomForestFromAction, self).__init__()
         self.logger = logging.getLogger('{}.{}'.format(self.__module__, type(self).__name__))
         self.logger.debug('Insantiating {}'.format(type(self).__name__))
-        self.rf            = sklearn.ensemble.RandomForestClassifier() if rf is None else rf
-        self.graph         = graph
-        self.costs         = costs
-        self.edge_features = edge_features
-        self.edge_weights  = edge_weights
-        self.edge_labels   = {} if edge_labels is None else edge_labels
-        self.trained_model = rf is not None
-        self.retrain_rf    = False
-        self.solution      = initial_solution
+        self.rf                    = rf_read_write.get_rf(version) # sklearn.ensemble.RandomForestClassifier() if rf is None else rf
+        self.trained_model         = False
+        self.retrain_rf            = True
+        self.solution              = None
+        self.version               = version
+        self.actions               = []
+        self.versioned_graph_store = versioned_graph_store
+        self.versioning            = versioning
+        self.graph                 = None
+        self.edge_features         = None
+        self.edge_weights          = None
+
+        self._update_graph()
+
+    def _update_graph(self):
+        self.graph         = self.versioned_graph_store.get_graph(self.version)
+        self.edge_features = self.versioned_graph_store.get_edge_features(self.version)
+        self.edge_weights  = self.versioned_graph_store.get_edge_weights(self.version)
+
+    def _get_features_and_labels(self):
+        version  = self.version
+        features = []
+        labels   = []
+        while version is not None:
+            f, l = self._get_features_and_labels_for_version(version)
+            features.append( f )
+            labels.append( l )
+            version = self.versioning.parent(version)
+
+
+        if len(labels) == 0:
+            return np.empty((0,1)), np.empty((0,))
+
+        elif len(labels) == 1:
+            return np.array(features[0]), np.array(labels[0])
+
+        else:
+            features = np.append(features[0], features[1:])
+            labels   = np.append(labels[0], labels[1:])
+            return features, labels
+
+    def _get_features_and_labels_for_version(self, version):
+        actions       = self.actions if version == self.version else self.rf_read_write.get_actions(version)
+        graph         = self.graph if version == self.version else self.versioned_graph_store.get_graph(self.version)
+        edge_features = self.edge_features if version == self.version else self.versioned_graph_store.get_edge_features(self.version)
+        edge_labels   = {}
+        for action in actions:
+            self.handle_action(action, graph, edge_labels)
+
+        features = []
+        labels   = []
+        for edge_id, label in edge_labels.items():
+            features.append(edge_features[ edge_id, ... ])
+            labels.append(label)
+
+        return np.array(features), np.array(labels)
 
     def get_solution(self):
         self.logger.debug('Getting solution')
-        self.logger.debug('Graph:    %s', self.graph)
-        self.logger.debug('Costs:    %s', self.costs)
+        self.logger.debug('Version:                 %s', self.version)
+        self.logger.debug('Train if enough samples: %s', self.retrain_rf)
 
-        labels_for_all_classes_exist = np.all(np.unique(list(self.edge_labels.values())) == np.array([0, 1]))
-        classifier_training_required = self.retrain_rf and labels_for_all_classes_exist
 
-        if classifier_training_required:
+        if self.retrain_rf:
+            features, labels             = self._get_features_and_labels()
+            labels_for_all_classes_exist = labels.size > 0 and np.all(np.unique(labels) == np.array([0, 1]))
+            classifier_training_required = self.retrain_rf and labels_for_all_classes_exist
+            self.logger.debug('Got features:             %s', features)
+            self.logger.debug('Got labels:               %s', labels)
+            self.logger.debug('Have all required labels: %s', labels_for_all_classes_exist)
+            self.logger.debug('Re-training required:     %s', classifier_training_required)
 
-            features = []
-            labels   = []
-            for k, v in self.edge_labels.items():
-                features.append(self.edge_features[k, ...])
-                labels.append(v)
-            features = np.array(features)
-            labels   = np.array(labels)
+            if classifier_training_required:
 
-            self.rf.fit(features, labels)
-            self.trained_model = True
-            self.retrain_rf    = False
-            probabilities      = self.rf.predict_proba(self.edge_features)[:, 1]
-            # rag is still argument for compute_edge_costs
-            self.costs         = compute_edge_costs(probabilities, self.edge_weights)
-            self.solution      = solve_multicut(self.graph, self.costs)
+                self.rf.fit(features, labels)
+                self.trained_model = True
+                self.retrain_rf    = False
+                probabilities      = self.rf.predict_proba(self.edge_features)[:, 1]
+                # rag is still argument for compute_edge_costs
+                self.costs         = compute_edge_costs(probabilities, self.edge_weights)
+                self.solution      = solve_multicut(self.graph, self.costs)
+                self.logger.debug('Updated solution: %s', self.solution)
 
-        return self.solution
+        return self.solution if self.solution is not None else np.arange( self.graph.numberOfNodes, dtype=np.uint64 )
 
 
     def submit_actions(self, actions):
         for action in actions:
             self.logger.debug("Handling action: %s", action)
-            self.retrain_rf |= self.handle_action(action)
+            self.actions.append(action)
+        self.retrain_rf = True
 
-    def handle_action(self, action):
+    def handle_action(self, action, graph, edge_labels):
         self.logger.debug('Handling action %s', action)
 
         if isinstance(action, Detach):
-            return self._detach(action.fragment_id, *action.detach_from)
+            return self._detach(graph, edge_labels, action.fragment_id, *action.detach_from)
         elif isinstance(action, Merge):
-            return self._merge(*action.ids)
+            return self._merge(graph, edge_labels, *action.ids)
         elif isinstance(action, MergeAndDetach):
-            return self._confirm_grouping(action.merge_ids, action.detach_from)
+            return self._confirm_grouping(graph, edge_labels, action.merge_ids, action.detach_from)
 
-    def _merge(self, *ids):
+    def _merge(self, graph, edge_labels, *ids):
         self.logger.debug('Merging ids: %s', ids)
         # https://stackoverflow.com/a/942551/1725687
         if len(ids) < 2:
@@ -174,7 +232,7 @@ class TrainRandomForestFromAction(ActionHandler):
         if len(node_pairs) == 0:
             return False
 
-        edge_ids    = self.graph.findEdges(node_pairs)
+        edge_ids    = graph.findEdges(node_pairs)
         valid_edges = edge_ids != -1
 
         if not np.any(valid_edges):
@@ -183,40 +241,40 @@ class TrainRandomForestFromAction(ActionHandler):
         locations = edge_ids[valid_edges]
         self.logger.debug('Merges edges with ids: %s', locations)
         for edge_id in locations:
-            self.edge_labels[edge_id] = TrainRandomForestFromAction.merge_label
+            edge_labels[edge_id] = TrainRandomForestFromAction.merge_label
 
         return True
 
-    def _detach(self, fragment_id, *detach_from):
+    def _detach(self, graph, edge_labels, fragment_id, *detach_from):
         self.logger.debug('Detaching: %d from %s', fragment_id, detach_from)
         if len(detach_from) == 0:
-            relevant_edges = [edge for (node, edge) in self.graph.nodeAdjacency(fragment_id)]
+            relevant_edges = [edge for (node, edge) in graph.nodeAdjacency(fragment_id)]
             for edge in relevant_edges:
-                self.edge_labels[edge] = TrainRandomForestFromAction.separate_label
+                edge_labels[edge] = TrainRandomForestFromAction.separate_label
             return len(relevant_edges) > 0
         else:
             node_pairs = [[fragment_id, d] for d in detach_from]
 
-            edge_ids    = self.graph.findEdges(np.array(node_pairs))
+            edge_ids    = graph.findEdges(np.array(node_pairs))
             valid_edges = edge_ids != -1
 
             if np.any(valid_edges):
                 locations = edge_ids[valid_edges]
                 self.logger.debug('Detaching edges with ids: %s', locations)
                 for edge_id in locations:
-                    self.edge_labels[edge_id] = TrainRandomForestFromAction.separate_label
+                    edge_labels[edge_id] = TrainRandomForestFromAction.separate_label
                 return len(locations) > 0
 
         return False
 
-    def _confirm_grouping(self, group_fragments, not_part_of_group_fragments):
+    def _confirm_grouping(self, graph, edge_labels, group_fragments, not_part_of_group_fragments):
         self.logger.debug('Confirming: %s (merge) %s (detach)', group_fragments, not_part_of_group_fragments)
         retrain_rf = False
         if len(not_part_of_group_fragments) > 0:
             for fragment_id in group_fragments:
-                retrain_rf |= self._detach(fragment_id, *not_part_of_group_fragments)
+                retrain_rf |= self._detach(graph, edge_labels, fragment_id, *not_part_of_group_fragments)
 
-        retrain_rf |= self._merge(*group_fragments)
+        retrain_rf |= self._merge(graph, edge_labels, *group_fragments)
 
         return retrain_rf
 

@@ -4,10 +4,42 @@ import nifty
 import numpy as np
 import os
 import signal
+import sklearn
 import solver_backend
 import sys
 import time
 import yaml
+
+
+class DummyVersioning(object):
+
+	def parent(self, version):
+	    return None
+
+class DummyRFReadWrite(object):
+
+    def get_rf(self, version):
+        return sklearn.ensemble.RandomForestClassifier()
+
+    def get_actions(self, version):
+        return []
+
+class DummyVersionedGraphStore(object):
+
+    def __init__(self, graph, edge_features, edge_weights):
+        super( DummyVersionedGraphStore, self ).__init__()
+        self.graph         = graph
+        self.edge_features = edge_features
+        self.edge_weights   = edge_weights
+
+    def get_graph(self, version):
+        return self.graph
+
+    def get_edge_weights(self,version):
+        return self.edge_weights
+
+    def get_edge_features(self, version):
+        return self.edge_features
 
 if __name__ == "__main__":
     import argparse
@@ -48,7 +80,12 @@ if __name__ == "__main__":
 
     edge_features  = np.load(args.features, allow_pickle=False)
     costs          = np.zeros((graph.numberOfEdges,), dtype=np.float64)
-    action_handler = solver_backend.TrainRandomForestFromAction(graph, costs, edge_features=edge_features, edge_weights=weights)
+    action_handler = solver_backend.TrainRandomForestFromAction(
+        versioning=DummyVersioning(),
+        rf_read_write=DummyRFReadWrite(),
+        versioned_graph_store=DummyVersionedGraphStore(graph, edge_features, weights),
+        version=1
+        )
     server         = solver_backend.SolverServer(address, action_handler=action_handler)
     server.start()
 
