@@ -95,7 +95,6 @@ class MergeAndDetach(Action):
 
         def ensure_sequence(parameter):
             return () if parameter is None else (parameter if isinstance(parameter, collections.Sequence) else (parameter,))
-            pass
 
         self.merge_ids   = ensure_sequence(merge_ids)
         self.detach_from = ensure_sequence(detach_from)
@@ -109,18 +108,37 @@ class MergeAndDetach(Action):
     def from_data(data):
         return MergeAndDetach(data['fragments'], data['from'])
 
+class ConfirmGroupings(Action):
 
-identifier_to_class[Detach.identifier] = Detach
-identifier_to_class[Merge.identifier] = Merge
-identifier_to_class[MergeAndDetach.identifier] = MergeAndDetach
+    identifier = 'confirm-multiple-segments'
+
+    def __init__(self, *merge_ids):
+        super(ConfirmGroupings, self).__init__(ConfirmGroupings.identifier)
+
+        self.merge_ids = merge_ids
+
+    def data(self):
+        return {
+            "fragments" : self.merge_ids,
+            }
+
+    def from_data(data):
+        return ConfirmGroupings(*data['fragments'])
+
+
+identifier_to_class[Detach.identifier]           = Detach
+identifier_to_class[Merge.identifier]            = Merge
+identifier_to_class[MergeAndDetach.identifier]   = MergeAndDetach
+identifier_to_class[ConfirmGroupings.identifier] = ConfirmGroupings
 
 
 if __name__ == '__main__':
     detach           = Detach(1, 2, 3, 4)
     merge            = Merge(5, 6, 7)
     merge_and_detach = MergeAndDetach((1, 2, 3), (4, 5, 6))
+    confirm_grouping = ConfirmGroupings((1, 2, 3), (4, 5, 6))
 
-    json_array = Action.to_json_array(detach, merge, merge_and_detach)
+    json_array = Action.to_json_array(detach, merge, merge_and_detach, confirm_grouping)
     data_array = Action.from_json_array(json_array)
 
     print(json_array)
@@ -131,3 +149,5 @@ if __name__ == '__main__':
     print(data_array[1].to_json())
     print(merge_and_detach.to_json())
     print(data_array[2].to_json())
+    print(confirm_grouping.to_json())
+    print(data_array[3].to_json())

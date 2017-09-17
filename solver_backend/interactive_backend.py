@@ -224,6 +224,8 @@ class TrainRandomForestFromAction(ActionHandler):
             return self._merge(graph, edge_labels, *action.ids)
         elif isinstance(action, MergeAndDetach):
             return self._confirm_grouping(graph, edge_labels, action.merge_ids, action.detach_from)
+        elif isinstance(action, ConfirmGroupings):
+            return self._confirm_groupings(graph, edge_labels, *action.merge_ids)
 
     def _merge(self, graph, edge_labels, *ids):
         self.logger.debug('Merging ids: %s', ids)
@@ -280,6 +282,24 @@ class TrainRandomForestFromAction(ActionHandler):
         retrain_rf |= self._merge(graph, edge_labels, *group_fragments)
 
         return retrain_rf
+
+    def _confirm_groupings(self, graph, edge_labels, *group_fragments):
+        self.logger.debug('Confirming multiple grouping: %s', group_fragments)
+
+        for group in group_fragments:
+            self._merge(graph, edge_labels, *group)
+
+        if (len(group_fragments) > 1 ):
+            group1 = np.array(group_fragments[0])
+            group2 = np.array(group_fragments[1:]).flatten()
+            for g in group1:
+                self._detach(graph, edge_labels, g, *group2)
+            # edges  = cartesian_product( group1, group2 )
+
+        for group in group_fragments:
+            self._merge(graph, edge_labels, *group)
+
+        return
 
 class SolverServer(object):
 
@@ -368,6 +388,7 @@ class SolverServer(object):
                     json_object = json.loads(request)
                     version     = json_object['version']
                     actions     = Action.from_json_array(json.dumps(json_object['actions']))
+                    self.logger.debug("Actions as json object: %s", json_object)
                     self.logger.debug("Handling actions: %s", actions)
                     self.action_handler.submit_actions(version, actions)
                     # solution, self.graph, self.costs = self.action_handler.get_solution(self.graph, self.costs, actions, self.current_solution)
