@@ -1,7 +1,7 @@
 from __future__ import division, print_function
 
 import nifty.graph.rag as nrag
-import nifty.graph.optimization.multicut as nmc
+import nifty.graph.opt.multicut as nmc
 
 import numpy as np
 
